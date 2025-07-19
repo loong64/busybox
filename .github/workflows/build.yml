@@ -1,0 +1,59 @@
+name: build
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+        default: ''
+      latest:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        run: |
+          git clone --depth 1 --branch ${{ inputs.tag }} https://git.busybox.net/busybox ${{ github.workspace }}
+          # https://github.com/mirror/busybox/issues/104
+          wget -qO - https://github.com/loong64/busybox/raw/refs/heads/master/fix-build.patch | git apply
+          # https://github.com/mirror/busybox/issues/91
+          rm -f networking/tc.c
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install gcc-13-loongarch64-linux-gnu -y
+          sudo update-alternatives \
+            --install /usr/bin/loongarch64-linux-gnu-gcc loongarch64-linux-gnu-gcc /usr/bin/loongarch64-linux-gnu-gcc-13 100 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-ar loongarch64-linux-gnu-gcc-ar /usr/bin/loongarch64-linux-gnu-gcc-ar-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-nm loongarch64-linux-gnu-gcc-nm /usr/bin/loongarch64-linux-gnu-gcc-nm-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcc-ranlib loongarch64-linux-gnu-gcc-ranlib /usr/bin/loongarch64-linux-gnu-gcc-ranlib-13 \
+            --slave /usr/bin/loongarch64-linux-gnu-gcov loongarch64-linux-gnu-gcov /usr/bin/loongarch64-linux-gnu-gcov-13
+          sudo update-alternatives \
+            --install /usr/bin/loongarch64-linux-gnu-cpp loongarch64-linux-gnu-cpp /usr/bin/loongarch64-linux-gnu-cpp-13 100
+
+      - name: Configure
+        run: make defconfig
+        env:
+          ARCH: loongarch64
+          CROSS_COMPILE: loongarch64-linux-gnu-
+
+      - name: Build
+        run: make -j$(nproc)
+        env:
+          ARCH: loongarch64
+          CROSS_COMPILE: loongarch64-linux-gnu-
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ inputs.tag }}
+          tag_name: ${{ inputs.tag }}
+          files: busybox
+          make_latest: ${{ inputs.latest }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
