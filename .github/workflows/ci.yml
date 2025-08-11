@@ -1,74 +1,69 @@
 name: GitHub CI
 
 on:
-  pull_request:
-  push:
-    branches:
-      - master
   workflow_dispatch:
   schedule:
-    - cron: 0 0 * * 0
-
-defaults:
-  run:
-    shell: 'bash -Eeuo pipefail -x {0}'
-
-concurrency:
-  group: ${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
+    - cron: 0 20 * * *
 
 jobs:
-
   generate-jobs:
-    name: Generate Jobs
     runs-on: ubuntu-latest
     outputs:
-      strategy: ${{ steps.generate-jobs.outputs.strategy }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker-library/bashbrew@HEAD
-      - id: generate-jobs
-        name: Generate Jobs
-        run: |
-          strategy="$(GENERATE_STACKBREW_LIBRARY='.github/workflows/fake-gsl.sh' "$BASHBREW_SCRIPTS/github-actions/generate.sh")"
-          strategy="$(.github/workflows/munge-build.sh -c <<<"$strategy")"
-          strategy="$(.github/workflows/munge-unstable.sh -c <<<"$strategy")"
 
-          EOF="EOF-$RANDOM-$RANDOM-$RANDOM"
-          echo "strategy<<$EOF" >> "$GITHUB_OUTPUT"
-          jq <<<"$strategy" . | tee -a "$GITHUB_OUTPUT"
-          echo "$EOF" >> "$GITHUB_OUTPUT"
-
-  test:
-    needs: generate-jobs
-    strategy: ${{ fromJson(needs.generate-jobs.outputs.strategy) }}
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-    env:
-      BASHBREW_ARCH: amd64 # TODO consider using "$BASHBREW_SCRIPTS/bashbrew-host-arch.sh" ? (would make it harder to force i386 in our matrix too, so explicit is probably better)
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker-library/bashbrew@HEAD # build.sh needs bashbrew
-      - name: Prepare Environment
-        run: ${{ matrix.runs.prepare }}
-      - name: Pull Dependencies
-        run: ${{ matrix.runs.pull }}
-      - name: Build ${{ matrix.name }}
-        run: ${{ matrix.runs.build }}
-      - name: History ${{ matrix.name }}
-        run: ${{ matrix.runs.history }}
-      - name: Test ${{ matrix.name }}
-        run: ${{ matrix.runs.test }}
-      - name: '"docker images"'
-        run: ${{ matrix.runs.images }}
-      - name: Git Diff # see "munge-build.sh"
+      - name: Install dependencies
         run: |
-          if git diff --exit-code */*/Dockerfile.builder; then # see "hack-unstable.sh" (and "munge-unstable.sh")
-            git diff --exit-code
+          sudo wget -q -O /usr/local/bin/bashbrew https://github.com/docker-library/bashbrew/releases/latest/download/bashbrew-amd64
+          sudo chmod +x /usr/local/bin/bashbrew
+          sudo chown root:root /usr/local/bin/bashbrew
+
+      - name: Check for changes
+        id: set-matrix
+        run: |
+          declare -a changed_apps
+          apps=("busybox")
+          commit_message="build(app): bump app to latest"
+          
+          for app in "${apps[@]}"; do
+            chmod +x *.sh
+            ./update.sh
+            if git status --porcelain -- $app | grep 'M'; then
+              changed_apps+=("$app")
+            fi
+          done
+
+          if [ ${#changed_apps[@]} -eq 0 ]; then
+            echo 'matrix={"include":[]}' >> $GITHUB_OUTPUT
           else
-            # for unstable builds, let's leave this in but purely informational (instead of causing CI to fail)
-            git diff
+            json_array=$(printf '%s\n' "${changed_apps[@]}" | jq -R . | jq -s '. | map({"app":.})' | jq -c .)
+            echo "matrix={\"include\":${json_array}}" >> $GITHUB_OUTPUT
           fi
+
+          git status
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git commit -am "${commit_message}" || exit 0
+          git push origin HEAD:main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trigger-workflows:
+    needs: generate-jobs
+    if: ${{ fromJson(needs.generate-jobs.outputs.matrix).include[0] }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.generate-jobs.outputs.matrix) }}
+    steps:
+      - name: Trigger workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: '${{ matrix.app }}.yml',
+              ref: 'master'
+            })

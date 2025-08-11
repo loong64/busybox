@@ -146,12 +146,6 @@ RUN set -eux; \
 			"; \
 			;; \
 			\
-		loong64) \
-			setConfs="$setConfs \
-				BR2_loongarch64=y \
-			"; \
-			;; \
-			\
 		mips64el) \
 			setConfs="$setConfs \
 				BR2_mips64el=y \

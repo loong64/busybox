@@ -1,0 +1,170 @@
+name: build(busybox)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 3 * *'
+
+jobs:
+  busybox:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        name: ['busybox']
+        suite: ['glibc', 'musl']
+        version: ['latest', 'latest-1']
+        latest_version: ['latest']
+    env:
+      BASHBREW_ARCH: loong64
+
+    steps:
+      - name: Checkout ${{ matrix.name }}
+        uses: actions/checkout@v4
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Version
+        run: |
+          echo "build=true" >> $GITHUB_ENV
+          if [ ! -f "${{ matrix.version }}/${{ matrix.suite }}/Dockerfile.builder" ]; then
+            echo "build=false" >> $GITHUB_ENV
+            exit 0
+          fi
+          full_version=$(grep -m1 -oP "ENV BUSYBOX_VERSION \K.*" ${{ matrix.version }}/${{ matrix.suite }}/Dockerfile.builder)
+          echo "full_version=${full_version}" >> $GITHUB_ENV
+          
+          version=${{ matrix.version }}
+          image_tag=${version}
+          full_image_tag=${full_version}
+
+          echo "image_tag=${image_tag}" >> $GITHUB_ENV
+          echo "full_image_tag=${full_image_tag}" >> $GITHUB_ENV
+
+      - name: Build ${{ matrix.version }}-${{ matrix.suite }}
+        if: env.build == 'true'
+        run: |
+          dir="${{ matrix.version }}/${{ matrix.suite }}"
+          rm -rf "$dir/$BASHBREW_ARCH"
+          ./build.sh "$dir"
+          docker buildx build --platform linux/loong64 --tag "${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}" "$dir" --load
+
+      - name: History ${{ matrix.version }}-${{ matrix.suite }}
+        if: env.build == 'true'
+        run: |
+          docker history "${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}"
+
+      - name: "docker images"
+        if: env.build == 'true'
+        run: |
+          docker image ls | grep ${{ matrix.name }}
+
+      - name: Prepare configuration
+        if: env.build == 'true'
+        run: |
+          wget -qO- https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | sudo tar -xzf - -C /usr/local/bin/ crane
+          sudo chmod +x /usr/local/bin/crane
+          sudo chown root:root /usr/local/bin/crane
+
+      - name: Push Images
+        if: env.build == 'true'
+        run: |
+          full_version="${{ env.full_version }}"
+          minor_version=$(echo "$full_version" | cut -d'.' -f1-2)
+          major_version=$(echo "$full_version" | cut -d'.' -f1)
+          repo="ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}"
+          suite="${{ matrix.suite }}"
+          version="${{ matrix.version }}"
+          latest_version="${{ matrix.latest_version }}"
+
+          docker tag "${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}" "ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}"
+          docker push "ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}"
+          crane cp "ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}" "$repo:$full_version-$suite-loong64"
+
+          if [ "$version" = "$latest_version" ]; then
+            crane index append -t "$repo:$full_version-$suite" \
+              -m "$repo:$full_version-$suite-loong64" \
+              -m "busybox:$full_version-$suite"
+            crane cp "$repo:$full_version-$suite" "$repo:$minor_version-$suite"
+            crane cp "$repo:$full_version-$suite" "$repo:$major_version-$suite"
+            crane cp "$repo:$full_version-$suite" "$repo:stable-$suite"
+            if [ "$suite" = "glibc" ]; then
+              crane cp "$repo:$full_version-$suite" "$repo:$full_version"
+              crane cp "$repo:$full_version-$suite" "$repo:$minor_version"
+              crane cp "$repo:$full_version-$suite" "$repo:$major_version"
+              crane cp "$repo:$full_version-$suite" "$repo:stable"
+            fi
+          fi
+
+      - name: Upload metadata
+        if: env.build == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-${{ matrix.version }}-${{ matrix.suite }}
+          path: ${{ matrix.version }}/${{ matrix.suite }}/${{ env.BASHBREW_ARCH }}
+
+  update:
+    runs-on: ubuntu-latest
+    needs: busybox
+    env:
+      BASHBREW_ARCH: loong64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-glibc
+          path: latest/glibc/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-1-glibc
+          path: latest-1/glibc/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-musl
+          path: latest/musl/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-1-musl
+          path: latest-1/musl/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+
+      - name: Commit changes
+        run: |
+          git status
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git add .
+          git commit -m "Update metadata for loong64" || exit 0
+          git push origin HEAD:master
+
+          git branch -D mate-loong64 || true
+          git branch -m mate-loong64
+          git push -f origin mate-loong64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

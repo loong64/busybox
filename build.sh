@@ -9,20 +9,22 @@ if [ "$#" -eq 0 ]; then
 fi
 
 [ -n "$BASHBREW_ARCH" ]
-platformString="$(bashbrew cat --format '{{ ociPlatform arch }}' <(echo 'Maintainers: empty hack (@example)'))"
-platform="$(bashbrew cat --format '{{ ociPlatform arch | json }}' <(echo 'Maintainers: empty hack (@example)'))"
+# platformString="$(bashbrew cat --format '{{ ociPlatform arch }}' <(echo 'Maintainers: empty hack (@example)'))"
+# platform="$(bashbrew cat --format '{{ ociPlatform arch | json }}' <(echo 'Maintainers: empty hack (@example)'))"
+platformString="linux/$BASHBREW_ARCH"
+platform='{"architecture":"loong64","os":"linux"}'
 
 for dir; do
 	variant="$(basename "$dir")"
 	base="busybox:${dir////-}-$BASHBREW_ARCH"
 
-	froms="$(awk 'toupper($1) == "FROM" { print $2 }' "$dir/Dockerfile.builder")"
-	for from in "$froms"; do
-		if ! bashbrew remote arches --json "$from" | jq -e '.arches | has(env.BASHBREW_ARCH)' > /dev/null; then
-			echo >&2 "warning: '$base' is 'FROM $from' which does not support '$BASHBREW_ARCH'; skipping"
-			continue 2
-		fi
-	done
+	# froms="$(awk 'toupper($1) == "FROM" { print $2 }' "$dir/Dockerfile.builder")"
+	# for from in "$froms"; do
+		# if ! bashbrew remote arches --json "$from" | jq -e '.arches | has(env.BASHBREW_ARCH)' > /dev/null; then
+			# echo >&2 "warning: '$base' is 'FROM $from' which does not support '$BASHBREW_ARCH'; skipping"
+			# continue 2
+		# fi
+	# done
 
 	(
 		set -x
