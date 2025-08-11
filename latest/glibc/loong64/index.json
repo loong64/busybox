@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 2,
+	"mediaType": "application/vnd.oci.image.index.v1+json",
+	"manifests": [
+		{
+			"mediaType": "application/vnd.oci.image.manifest.v1+json",
+			"digest": "sha256:cc2cfa9507098ff1163bb57a2819a03da8a909ff1cc817f519d0bb1122a6d59d",
+			"size": 610,
+			"platform": {
+				"architecture": "loong64",
+				"os": "linux"
+			},
+			"annotations": {
+				"org.opencontainers.image.ref.name": "busybox:1.37.0-glibc",
+				"io.containerd.image.name": "busybox:1.37.0-glibc"
+			}
+		}
+	]
+}
