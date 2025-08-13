@@ -10,9 +10,15 @@ on:
       - opened
       - synchronize
       - reopened
+    paths:
+      - 'latest/**'
+      - 'latest-1/**'
   push:
     branches:
       - master
+    paths:
+      - 'latest/**'
+      - 'latest-1/**'
   workflow_dispatch:
   schedule:
     - cron: '0 0 3 * *'
