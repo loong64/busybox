@@ -132,13 +132,66 @@ jobs:
           name: ${{ matrix.name }}-${{ matrix.version }}-${{ matrix.suite }}
           path: ${{ matrix.version }}/${{ matrix.suite }}/${{ env.BASHBREW_ARCH }}
 
-  update:
+  update-metadata:
     runs-on: ubuntu-latest
     needs: busybox
     env:
       BASHBREW_ARCH: loong64
     steps:
       - uses: actions/checkout@v4
+
+      - name: Prepare artifacts
+        run: |
+          find . -name ${{ env.BASHBREW_ARCH }} | xargs rm -rf
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-glibc
+          path: latest/glibc/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-1-glibc
+          path: latest-1/glibc/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-musl
+          path: latest/musl/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: busybox-latest-1-musl
+          path: latest-1/musl/${{ env.BASHBREW_ARCH }}
+          merge-multiple: true
+
+      - name: Commit changes
+        run: |
+          find . -name rootfs.tar.gz | xargs rm -f
+          git status
+          git config --global user.name "${GITHUB_ACTOR}"
+          git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
+          git add .
+          git commit -m "Update metadata for loong64" || exit 0
+          git push origin HEAD:master
+
+          git branch -D mate-loong64 || true
+          git branch -m mate-loong64
+          git push -f origin mate-loong64
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-dist:
+    runs-on: ubuntu-latest
+    needs: 
+      - busybox
+      - update-metadata
+    env:
+      BASHBREW_ARCH: loong64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: mate-loong64
       - uses: actions/download-artifact@v4
         with:
           pattern: busybox-latest-glibc
@@ -166,11 +219,10 @@ jobs:
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR}@users.noreply.github.com"
           git add .
-          git commit -m "Update metadata for loong64" || exit 0
-          git push origin HEAD:master
+          git commit -m "Builds for loong64" || exit 0
 
-          git branch -D mate-loong64 || true
-          git branch -m mate-loong64
-          git push -f origin mate-loong64
+          git branch -D dist-loong64 || true
+          git branch -m dist-loong64
+          git push -f origin dist-loong64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
