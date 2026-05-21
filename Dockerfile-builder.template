@@ -1,5 +1,5 @@
 {{ if env.variant == "musl" then ( -}}
-FROM ghcr.io/loong64/alpine:3.22
+FROM ghcr.io/loong64/alpine:3.23
 
 RUN set -eux; \
 	apk add --no-cache \
@@ -20,8 +20,7 @@ RUN set -eux; \
 FROM ghcr.io/loong64/debian:trixie-slim
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y \
+	apt-get install --update -y \
 		bzip2 \
 		curl \
 		gcc \
@@ -29,15 +28,14 @@ RUN set -eux; \
 		make \
 		patch \
 	; \
-	rm -rf /var/lib/apt/lists/*
+	apt-get dist-clean
 {{ ) end -}}
 {{ if env.variant == "uclibc" then ( -}}
 
 # grab/use buildroot for its uClibc toolchain
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y \
+	apt-get install --update -y \
 		bc \
 		cpio \
 		dpkg-dev \
@@ -49,7 +47,7 @@ RUN set -eux; \
 		unzip \
 		wget \
 	; \
-	rm -rf /var/lib/apt/lists/*
+	apt-get dist-clean
 
 RUN set -eux; \
 	mkdir -p ~/.gnupg; \
@@ -267,9 +265,20 @@ WORKDIR /usr/src/busybox
 	(
 		[
 			"no-cbq.patch",
-			if .version | startswith("1.36.") then empty else
-				"sha1_process_block64_shaNI.patch"
-			end,
+			if env.variant == "musl" then
+				if .version | startswith("1.37.") then
+					"hackfix-to-disable-HW-acceleration-for-MD5-SHA1-on-x86-1.37.patch"
+				else
+					"hackfix-to-disable-HW-acceleration-for-MD5-SHA1-on-x86.patch"
+				end
+			else empty end,
+			if .version | startswith("1.37.") then
+				if env.variant == "musl" then
+					"sha1_process_block64_shaNI-musl.patch"
+				else
+					"sha1_process_block64_shaNI.patch"
+				end
+			else empty end,
 			empty # trailing comma
 		]
 		| map("/.patches/" + .)
@@ -307,6 +316,11 @@ RUN set -eux; \
 {{ ) else ( -}}
 		CONFIG_STATIC=y \
 {{ ) end -}}
+		\
+# https://github.com/docker-library/busybox/issues/232
+# https://git.busybox.net/busybox/tree/miscutils/inotifyd.c?id=6937487be73cd4563b876413277a295a5fe2f32c#n31
+# "default n  # doesn't build on Knoppix 5" 😅😂
+		CONFIG_INOTIFYD=y \
 	'; \
 	\
 	unsetConfs=' \
@@ -365,7 +379,7 @@ RUN set -eux; \
 		arm64 | aarch64)       ARCH='aarch64' ;; \
 		armhf | armel | armv*) ARCH='arm'     ;; \
 		i386  | x86)           ARCH='i386'    ;; \
-		loong64 | loongarch64) ARCH='loongarch64' ;; \
+		loong64 | loongarch64) ARCH='loongarch64';; \
 		mips*)                 ARCH='mips'    ;; \
 		ppc*)                  ARCH='powerpc' ;; \
 		riscv64)               ARCH='riscv64' ;; \

@@ -7,8 +7,7 @@
 FROM ghcr.io/loong64/debian:trixie-slim
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y \
+	apt-get install --update -y \
 		bzip2 \
 		curl \
 		gcc \
@@ -16,13 +15,12 @@ RUN set -eux; \
 		make \
 		patch \
 	; \
-	rm -rf /var/lib/apt/lists/*
+	apt-get dist-clean
 
 # grab/use buildroot for its uClibc toolchain
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y \
+	apt-get install --update -y \
 		bc \
 		cpio \
 		dpkg-dev \
@@ -34,7 +32,7 @@ RUN set -eux; \
 		unzip \
 		wget \
 	; \
-	rm -rf /var/lib/apt/lists/*
+	apt-get dist-clean
 
 RUN set -eux; \
 	mkdir -p ~/.gnupg; \
@@ -250,7 +248,6 @@ WORKDIR /usr/src/busybox
 # apply necessary/minimal patches (see /.patches/ in the top level of the repository)
 COPY \
 	/.patches/no-cbq.patch \
-	/.patches/sha1_process_block64_shaNI.patch \
 	./.patches/
 RUN set -eux; \
 	for patch in .patches/*.patch; do \
@@ -272,6 +269,11 @@ RUN set -eux; \
 # CONFIG_LAST_SUPPORTED_WCHAR: see https://github.com/docker-library/busybox/issues/13 (UTF-8 input)
 		CONFIG_LAST_SUPPORTED_WCHAR=0 \
 		CONFIG_STATIC=y \
+		\
+# https://github.com/docker-library/busybox/issues/232
+# https://git.busybox.net/busybox/tree/miscutils/inotifyd.c?id=6937487be73cd4563b876413277a295a5fe2f32c#n31
+# "default n  # doesn't build on Knoppix 5" 😅😂
+		CONFIG_INOTIFYD=y \
 	'; \
 	\
 	unsetConfs=' \

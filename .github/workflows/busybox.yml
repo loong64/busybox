@@ -38,16 +38,16 @@ jobs:
 
     steps:
       - name: Checkout ${{ matrix.name }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload metadata
         if: env.build == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.name }}-${{ matrix.version }}-${{ matrix.suite }}
           path: ${{ matrix.version }}/${{ matrix.suite }}/${{ env.BASHBREW_ARCH }}
@@ -138,28 +138,28 @@ jobs:
     env:
       BASHBREW_ARCH: loong64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Prepare artifacts
         run: |
           find . -name ${{ env.BASHBREW_ARCH }} | xargs rm -rf
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-glibc
           path: latest/glibc/${{ env.BASHBREW_ARCH }}
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-1-glibc
           path: latest-1/glibc/${{ env.BASHBREW_ARCH }}
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-musl
           path: latest/musl/${{ env.BASHBREW_ARCH }}
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-1-musl
           path: latest-1/musl/${{ env.BASHBREW_ARCH }}
@@ -189,25 +189,25 @@ jobs:
     env:
       BASHBREW_ARCH: loong64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: mate-loong64
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-glibc
           path: latest/glibc/${{ env.BASHBREW_ARCH }}
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-1-glibc
           path: latest-1/glibc/${{ env.BASHBREW_ARCH }}
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-musl
           path: latest/musl/${{ env.BASHBREW_ARCH }}
           merge-multiple: true
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: busybox-latest-1-musl
           path: latest-1/musl/${{ env.BASHBREW_ARCH }}

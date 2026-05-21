@@ -7,8 +7,7 @@
 FROM ghcr.io/loong64/debian:trixie-slim
 
 RUN set -eux; \
-	apt-get update; \
-	apt-get install -y \
+	apt-get install --update -y \
 		bzip2 \
 		curl \
 		gcc \
@@ -16,7 +15,7 @@ RUN set -eux; \
 		make \
 		patch \
 	; \
-	rm -rf /var/lib/apt/lists/*
+	apt-get dist-clean
 
 # pub   1024D/ACC9965B 2006-12-12
 #       Key fingerprint = C9E9 416F 76E6 10DB D09D  040F 47B7 0C55 ACC9 965B
@@ -52,7 +51,6 @@ WORKDIR /usr/src/busybox
 # apply necessary/minimal patches (see /.patches/ in the top level of the repository)
 COPY \
 	/.patches/no-cbq.patch \
-	/.patches/sha1_process_block64_shaNI.patch \
 	./.patches/
 RUN set -eux; \
 	for patch in .patches/*.patch; do \
@@ -74,6 +72,11 @@ RUN set -eux; \
 # CONFIG_LAST_SUPPORTED_WCHAR: see https://github.com/docker-library/busybox/issues/13 (UTF-8 input)
 		CONFIG_LAST_SUPPORTED_WCHAR=0 \
 # As long as we rely on libnss (see below), we have to have libc.so anyhow, so we've removed CONFIG_STATIC here... 😭
+		\
+# https://github.com/docker-library/busybox/issues/232
+# https://git.busybox.net/busybox/tree/miscutils/inotifyd.c?id=6937487be73cd4563b876413277a295a5fe2f32c#n31
+# "default n  # doesn't build on Knoppix 5" 😅😂
+		CONFIG_INOTIFYD=y \
 	'; \
 	\
 	unsetConfs=' \
@@ -120,7 +123,7 @@ RUN set -eux; \
 		arm64 | aarch64)       ARCH='aarch64' ;; \
 		armhf | armel | armv*) ARCH='arm'     ;; \
 		i386  | x86)           ARCH='i386'    ;; \
-		loong64 | loongarch64) ARCH='loongarch64' ;; \
+		loong64 | loongarch64) ARCH='loongarch64';; \
 		mips*)                 ARCH='mips'    ;; \
 		ppc*)                  ARCH='powerpc' ;; \
 		riscv64)               ARCH='riscv64' ;; \
