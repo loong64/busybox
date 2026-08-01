@@ -224,5 +224,9 @@ jobs:
           git branch -D dist-loong64 || true
           git branch -m dist-loong64
           git push -f origin dist-loong64
+          
+          tag_name=$(date "+%Y%m%d")
+          git tag ${tag_name}
+          git push -f origin ${tag_name}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
