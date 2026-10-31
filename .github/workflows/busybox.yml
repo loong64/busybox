@@ -110,18 +110,22 @@ jobs:
           docker push "ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}"
           crane cp "ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}:${{ matrix.version }}-${{ matrix.suite }}" "$repo:$full_version-$suite-loong64"
 
-          if [ "$version" = "$latest_version" ]; then
-            crane index append -t "$repo:$full_version-$suite" \
+          crane index append -t "$repo:$full_version-$suite" \
               -m "$repo:$full_version-$suite-loong64" \
               -m "busybox:$full_version-$suite"
-            crane cp "$repo:$full_version-$suite" "$repo:$minor_version-$suite"
+          crane cp "$repo:$full_version-$suite" "$repo:$minor_version-$suite"
+          if [ "$suite" = "glibc" ]; then
+            crane cp "$repo:$full_version-$suite" "$repo:$full_version"
+            crane cp "$repo:$full_version-$suite" "$repo:$minor_version"
+          fi
+          if [ "$version" = "$latest_version" ]; then
             crane cp "$repo:$full_version-$suite" "$repo:$major_version-$suite"
             crane cp "$repo:$full_version-$suite" "$repo:stable-$suite"
+            crane cp "$repo:$full_version-$suite" "$repo:$suite"
             if [ "$suite" = "glibc" ]; then
-              crane cp "$repo:$full_version-$suite" "$repo:$full_version"
-              crane cp "$repo:$full_version-$suite" "$repo:$minor_version"
               crane cp "$repo:$full_version-$suite" "$repo:$major_version"
               crane cp "$repo:$full_version-$suite" "$repo:stable"
+              crane cp "$repo:$full_version-$suite" "$repo:latest"
             fi
           fi
 
